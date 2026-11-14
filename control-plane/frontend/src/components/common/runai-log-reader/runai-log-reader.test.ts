@@ -704,23 +704,51 @@ describe("runai-log-reader.vue", () => {
       if (kept) expect(keptRow && reader.element.contains(keptRow) && keptRow.textContent).toBe(kept);
     });
 
+    // jsdom does no layout: give the list a writable scrollTop and a scrollHeight the test controls
+    const stubLayout = (el: Element) => {
+      let top = 0;
+      let height = 100;
+      Object.defineProperty(el, "scrollTop", { configurable: true, get: () => top, set: (v: number) => (top = v) });
+      Object.defineProperty(el, "scrollHeight", { configurable: true, get: () => height });
+      return { grow: () => (height += 100) };
+    };
+
     test.each([
       { name: "a new frame", act: (reader: Reader) => sendFrame(reader, "d\n") },
       { name: "lowering the limit", act: (reader: Reader) => reader.setProps({ maxLines: 2 }) },
     ])("a following reader keeps following after $name", async ({ act }) => {
       const reader = factory({ maxLines: 3 });
       const list = reader.find(".list-container");
+      const layout = stubLayout(list.element);
       sendFrame(reader, "a\nb\nc\n");
+      layout.grow();
       await nextTick();
       // The browser fires a scroll event for each scrollTop change; jsdom does not, so fire it here
       await list.trigger("scroll");
 
+      layout.grow();
       await act(reader);
       await nextTick();
       await list.trigger("scroll");
 
       expect(list.classes()).not.toContain("paused");
       expect(reader.find(".resume-button").exists()).toBe(false);
+    });
+
+    test("a user scroll still pauses after raising the limit while already at the bottom", async () => {
+      const reader = factory({ maxLines: 3 });
+      const list = reader.find(".list-container");
+      stubLayout(list.element);
+      sendFrame(reader, "a\nb\nc\n");
+      await nextTick();
+      await list.trigger("scroll");
+
+      // Rows are unchanged and the list is at the bottom, so no scroll event follows
+      await reader.setProps({ maxLines: 5 });
+      await nextTick();
+      await list.trigger("scroll");
+
+      expect(list.classes()).toContain("paused");
     });
   });
 });

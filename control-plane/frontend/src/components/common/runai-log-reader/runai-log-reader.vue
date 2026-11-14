@@ -253,8 +253,11 @@ export default defineComponent({
       nextTick(() => {
         const listContainer: HTMLElement = this.$refs["list-container"] as HTMLElement;
         if (!listContainer) return;
+        const before = listContainer.scrollTop;
         this.isProgrammaticScroll = true;
-        listContainer.scrollTop = (listContainer as HTMLElement).scrollHeight;
+        listContainer.scrollTop = listContainer.scrollHeight;
+        // Already at the bottom: no scroll event follows, so don't leave the flag set to swallow the next user scroll.
+        if (listContainer.scrollTop === before) this.isProgrammaticScroll = false;
       });
     },
     handleScroll(): void {
